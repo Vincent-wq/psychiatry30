@@ -127,13 +127,7 @@ dmypy.json
 
 # Pyre type checker
 .pyre/
-data/1991 final 20230110.xlsx
-data/1990-Article-Data.xlsx
-data/0029679869-ABSTRACT_RETRIEVAL-0.json
-data/84953646000.zip
-data/84953646000/84953646000-ABSTRACT_RETRIEVAL-0.json
-data/84953646000/84953646000-CITATIONS_OVERVIEW-0.json
-data/84953646000/84953646000-SCOPUS_SEARCH-1.json
-data/84953646000/84953646000-SCOPUS_SEARCH-2.json
+data/data_currated/*
+data/scopus/*
 data/~$1990-Article-Data.xlsx
 data/~$1991 final 20230110.xlsx
