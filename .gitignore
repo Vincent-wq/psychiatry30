@@ -127,7 +127,5 @@ dmypy.json
 
 # Pyre type checker
 .pyre/
-data/data_currated/*
-data/scopus/*
-data/~$1990-Article-Data.xlsx
-data/~$1991 final 20230110.xlsx
+data/*
+
