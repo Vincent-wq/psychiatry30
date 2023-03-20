@@ -18,7 +18,12 @@ def parse_abs_file(_abs_path, COUNTRY_DICT, paper_df, author_df, affi_df, area_d
         _tmp_paper_dict["year"]  = _year_paper
         _tmp_paper_dict["date"] = abs_dict["abstracts-retrieval-response"]["coredata"]["prism:coverDate"]
         _tmp_paper_dict["type"] = abs_dict["abstracts-retrieval-response"]["coredata"]["subtype"]
-        _tmp_paper_dict["journal_id"] = abs_dict["abstracts-retrieval-response"]["coredata"]["source-id"]
+        if "source-id" in abs_dict["abstracts-retrieval-response"]["coredata"].keys():
+            _tmp_paper_dict["journal_id"] = abs_dict["abstracts-retrieval-response"]["coredata"]["source-id"]
+            _has_journal_info = 1
+        else:
+            _tmp_paper_dict["journal_id"] = None
+            _has_journal_info = 0
         if "openaccess" in abs_dict["abstracts-retrieval-response"]["coredata"].keys():
             _tmp_paper_dict["open_access"] = abs_dict["abstracts-retrieval-response"]["coredata"]["openaccess"]
         else:
@@ -30,7 +35,11 @@ def parse_abs_file(_abs_path, COUNTRY_DICT, paper_df, author_df, affi_df, area_d
         else:
             print("No DOI info...")
             _tmp_paper_dict["DOI"] = None
-        _tmp_paper_dict["title"] = abs_dict["abstracts-retrieval-response"]["coredata"]["dc:title"]
+        if "dc:title" in abs_dict["abstracts-retrieval-response"]["coredata"].keys():
+            _tmp_paper_dict["title"] = abs_dict["abstracts-retrieval-response"]["coredata"]["dc:title"]
+        else:
+            _tmp_paper_dict["title"] = None
+            print("paper", _paper, "has no title!")
         # creating areas list
         _tmp_area_list= [{"area_id":_x["@code"], "area_abbrev":_x["@abbrev"], "area_name":_x["$"]}
                          for _x in abs_dict["abstracts-retrieval-response"]["subject-areas"]["subject-area"]]
@@ -65,81 +74,19 @@ def parse_abs_file(_abs_path, COUNTRY_DICT, paper_df, author_df, affi_df, area_d
         _tmp_affi_city_dict = {}
         _author_group_lacking = 0
         if "author-group" in abs_dict["abstracts-retrieval-response"]["item"]["bibrecord"]["head"].keys():
-            _raw_affi_list = abs_dict["abstracts-retrieval-response"]["item"]["bibrecord"]["head"]["author-group"]
-            _num_affi = len(_raw_affi_list)
+            if isinstance(abs_dict["abstracts-retrieval-response"]["item"]["bibrecord"]["head"]["author-group"], dict):
+                _raw_affi_list = [abs_dict["abstracts-retrieval-response"]["item"]["bibrecord"]["head"]["author-group"]]
+            elif isinstance(abs_dict["abstracts-retrieval-response"]["item"]["bibrecord"]["head"]["author-group"], list):
+                _raw_affi_list = list(filter(f_filt_none, abs_dict["abstracts-retrieval-response"]["item"]["bibrecord"]["head"]["author-group"]))
+            else:
+                _author_group_lacking = 1
+                _raw_affi_list=[]
         else:
             _author_group_lacking = 1
             _raw_affi_list = []
-
-        if _author_group_lacking == 0 and isinstance(_raw_affi_list, dict):
-            __tmp_affi_dict={}
-            __tmp_affi_dict["year"] = _year_paper
-            if "affiliation" in _raw_affi_list.keys():
-                if "@afid" in _raw_affi_list["affiliation"]:
-                    __tmp_affi_dict["affi_id"] = _raw_affi_list["affiliation"]["@afid"]
-                else:
-                    __tmp_affi_dict["affi_id"] = None
-
-                # handling affiliation name 
-                if "organization" in _raw_affi_list["affiliation"].keys():
-                    if isinstance(_raw_affi_list["affiliation"]["organization"], list):
-                        __tmp_affi_dict["affi_name"] = _raw_affi_list["affiliation"]["organization"][-1]["$"]
-                    else:
-                        __tmp_affi_dict["affi_name"] = _raw_affi_list["affiliation"]["organization"]["$"]
-                else:
-                    __tmp_affi_dict["affi_name"] = None
-                # handling department info
-                if "@dptid" in _raw_affi_list["affiliation"].keys():
-                    __tmp_affi_dict["dept_id"] = _raw_affi_list["affiliation"]["@dptid"]
-                    if "organization" in _raw_affi_list["affiliation"].keys():
-                        if len(_raw_affi_list["affiliation"]["organization"])>1:
-                            __tmp_affi_dict["dept_name"] = _raw_affi_list["affiliation"]["organization"][0]["$"]
-                        else:
-                            __tmp_affi_dict["dept_name"] = _raw_affi_list["affiliation"]["organization"]["$"]
-                    else:
-                        __tmp_affi_dict["dept_name"] = None
-                    # updating author dept relationship for author db
-
-                    if isinstance(_raw_affi_list, dict) and "author" in _raw_affi_list.keys():
-                        for _iter_author_in_dept in [ _x["@auid"] for _x in _raw_affi_list["author"] ]:
-                            for _iter_i in range(len(_tmp_authors_list)):
-                                if _tmp_authors_list[_iter_i]["author_id"] == _iter_author_in_dept:
-                                    _tmp_authors_list[_iter_i]["dept_id_list"].append(_raw_affi_list["affiliation"]["@dptid"])
-                else:
-                    __tmp_affi_dict["dept_id"] = None
-                    __tmp_affi_dict["dept_name"] = None
-                    if isinstance(_raw_affi_list, dict) and "author" in _raw_affi_list.keys():
-                        for _iter_author_in_dept in [ _x["@auid"] for _x in _raw_affi_list["author"] ]:
-                            for _iter_i in range(len(_tmp_authors_list)):
-                                if _tmp_authors_list[_iter_i]["author_id"] == _iter_author_in_dept:
-                                    _tmp_authors_list[_iter_i]["dept_id_list"]=[]
-
-                # use previous affiliation country and city to complete missing parts
-                if "country" in _raw_affi_list["affiliation"].keys():
-                    __tmp_country = _raw_affi_list["affiliation"]["country"]
-                    __tmp_affi_dict["country"] = __tmp_country
-                    _tmp_affi_country_dict[__tmp_affi_dict["affi_id"]] =__tmp_country
-                    if __tmp_country not in COUNTRY_DICT.values():
-                        COUNTRY_DICT[_raw_affi_list["affiliation"]["@country"]]=__tmp_country
-                else:
-                    __tmp_affi_dict["country"] = None
-                    _tmp_affi_country_dict[__tmp_affi_dict["affi_id"]] = None
-
-                if "city-group" in _raw_affi_list["affiliation"].keys():
-                    __tmp_affi_dict["city"] = _raw_affi_list["affiliation"]["city-group"]
-                    _tmp_affi_city_dict[__tmp_affi_dict["affi_id"]] = _raw_affi_list["affiliation"]["city-group"]
-                else:
-                    __tmp_affi_dict["city"] = None
-                    _tmp_affi_city_dict[__tmp_affi_dict["affi_id"]] = None
-                _tmp_affi_list.append(__tmp_affi_dict)
-
-            else:
-                __tmp_affi_dict["affi_id"] = None
-                __tmp_affi_dict["affi_name"] = None
-                __tmp_affi_dict["dept_id"] = None
-                __tmp_affi_dict["dept_name"] = None
-
-        elif _author_group_lacking == 0 and isinstance(_raw_affi_list, list):
+        _num_affi = len(_raw_affi_list)
+   
+        if  _author_group_lacking == 0 and len(_raw_affi_list)>0 :
             for _i in range(_num_affi-1,-1,-1):
                 __tmp_affi_dict={}
                 __tmp_affi_dict["year"] = _year_paper
@@ -352,22 +299,25 @@ def parse_abs_file(_abs_path, COUNTRY_DICT, paper_df, author_df, affi_df, area_d
         del _tmp_area_db_list
 
         ## journal db updated
-        _tmp_journal_dict={}
-        _tmp_journal_dict["journal_id"] = abs_dict["abstracts-retrieval-response"]["coredata"]["source-id"]
-        _tmp_journal_dict["journal_name"] = abs_dict["abstracts-retrieval-response"]["coredata"]["prism:publicationName"]
-        if "dc:publisher" in abs_dict["abstracts-retrieval-response"]["coredata"].keys():
-            _tmp_journal_dict["publisher"] = abs_dict["abstracts-retrieval-response"]["coredata"]["dc:publisher"]
+        if _has_journal_info:
+            _tmp_journal_dict={}
+            _tmp_journal_dict["journal_id"] = abs_dict["abstracts-retrieval-response"]["coredata"]["source-id"]
+            _tmp_journal_dict["journal_name"] = abs_dict["abstracts-retrieval-response"]["coredata"]["prism:publicationName"]
+            if "dc:publisher" in abs_dict["abstracts-retrieval-response"]["coredata"].keys():
+                _tmp_journal_dict["publisher"] = abs_dict["abstracts-retrieval-response"]["coredata"]["dc:publisher"]
+            else:
+                _tmp_journal_dict["publisher"] = None
+            if "@country" in abs_dict["abstracts-retrieval-response"]["item"]["bibrecord"]["head"]["source"]:
+                _tmp_journal_dict["country"] = abs_dict["abstracts-retrieval-response"]["item"]["bibrecord"]["head"]["source"]["@country"]
+            else:
+                _tmp_journal_dict["country"] = None
+            _tmp_journal_dict["IF_year_list"] = []
+            _tmp_journal_dict["Quantile_year_list"] = []
+            # journal db updated
+            journal_df = pd.concat([journal_df, pd.DataFrame([_tmp_journal_dict])], ignore_index=True)
+            del _tmp_journal_dict
         else:
-            _tmp_journal_dict["publisher"] = None
-        if "@country" in abs_dict["abstracts-retrieval-response"]["item"]["bibrecord"]["head"]["source"]:
-            _tmp_journal_dict["country"] = abs_dict["abstracts-retrieval-response"]["item"]["bibrecord"]["head"]["source"]["@country"]
-        else:
-            _tmp_journal_dict["country"] = None
-        _tmp_journal_dict["IF_year_list"] = []
-        _tmp_journal_dict["Quantile_year_list"] = []
-        # journal db updated
-        journal_df = pd.concat([journal_df, pd.DataFrame([_tmp_journal_dict])], ignore_index=True)
-        del _tmp_journal_dict
+            print("No journal ID provided for paper:", _paper)
 
         ## paper content db
         _tmp_paper_content_dict = {}
@@ -418,3 +368,15 @@ def parse_citation_file(_citation_path_list, cite_df):
     print(_cited_no_affi_cnt, " cited papers has no affliliations...")        
     cite_df = pd.concat([cite_df, pd.DataFrame(_tmp_cited_list)], ignore_index=True)
     return cite_df, no_aff_paper_list
+
+def f_filt_none(_x):
+    if isinstance(_x, dict):
+        return True
+    elif _x == None:
+        return False
+    elif _x.lower()=="null":
+        return False
+    elif _x == "":
+        return False
+    else:
+        return True
